@@ -12,6 +12,7 @@ import pandas as pd
 rec_path = '/files/p1000/p10000117/s45090959/45090959'
 recordid = "45090959"
 rd_record = wfdb.rdrecord(recordid, pn_dir='mimic-iv-ecg/1.0/files/p1000/p10000117/s45090959')
+wfdb.plot_wfdb(record = rd_record, figsize=(24, 18), title =f'Study {recordid} example', ecg_grids='all')
 
 #30 seconds of ECG material
 rd_record.p_signal.shape
