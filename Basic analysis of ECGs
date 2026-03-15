@@ -1,0 +1,111 @@
+!pip install wfdb==4.3.1 neurokit2
+import wfdb
+import matplotlib.pyplot as plt
+
+#loads neurokit
+import neurokit2 as nk
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+
+#example of plotting an ECG
+rec_path = '/files/p1000/p10000117/s45090959/45090959'
+recordid = "45090959"
+rd_record = wfdb.rdrecord(recordid, pn_dir='mimic-iv-ecg/1.0/files/p1000/p10000117/s45090959')
+
+#30 seconds of ECG material
+rd_record.p_signal.shape
+ecg_signal = rd_record.p_signal[:,0]
+
+#processess the raw ECG signal
+signals, info = nk.ecg_process(ecg_signal, sampling_rate=rd_record.fs)
+
+# Extracts clean ECG and R-peaks location
+rpeaks = info["ECG_R_Peaks"]
+cleaned_ecg = signals["ECG_Clean"]
+nk.signal_plot(signals, sampling_rate=rd_record.fs)
+
+# Visualize R-peaks in ECG signal
+plot = nk.events_plot(rpeaks, cleaned_ecg)
+epochs = nk.ecg_segment(cleaned_ecg, rpeaks=None, sampling_rate=250, show=True)
+
+tachycardia_count = 0
+brachycardia_count = 0
+sinus_count = 0
+
+#Get list of ECG records from dataset
+records = wfdb.get_record_list("mimic-iv-ecg/1.0/files/p1000")
+
+num_ecgs_to_process = 10;
+
+#Loop through the first __ ECGs
+for full_recordid in records[:num_ecgs_to_process]:
+
+    #get record ID from path
+    record_id = full_recordid.split("/")[-1]
+
+    #get folder path
+    folder_path = full_recordid.rsplit("/", 1)[0]
+
+    #Load ECG record
+    rd_record = wfdb.rdrecord(record_id, pn_dir=f"mimic-iv-ecg/1.0/files/p1000/{folder_path}")
+
+    #Sampling frequency
+    fs = rd_record.fs
+
+    #to store heart rate from each lead
+    lead_hrs = []
+
+    #Loop through all 12 leads
+    for lead_idx in range(12):
+
+        #Get signal for current lead
+        signal = rd_record.p_signal[:, lead_idx]
+
+        #remove nan values
+        signal = signal[~np.isnan(signal)]
+
+        #Clean ECG signal
+        cleaned = nk.ecg_clean(signal, sampling_rate=fs)
+
+        #Detect R-peaks
+        peaks = nk.ecg_findpeaks(cleaned, sampling_rate=fs)
+        rpeaks = peaks["ECG_R_Peaks"]
+
+        #Calculate heart rate if enough beats detected to get a heart rate and hrv
+        if len(rpeaks) > 2:
+            rr = np.diff(rpeaks) / fs
+            hr = 60 / np.mean(rr)
+            lead_hrs.append(hr)
+
+        #If this is Lead II (where hrv is calculated), compute HRV
+        if lead_idx == 1 and len(rpeaks) > 2:
+            rr_lead2 = np.diff(rpeaks) / fs
+            rmssd = np.sqrt(np.mean(np.diff(rr_lead2) ** 2)) * 1000 #a short-term hrv measurement
+            #normal range for rmssd is 19 to 107 ms?
+
+    #After iterating through all leads: compute average heart rate of all 12 leads
+    if len(lead_hrs) > 0:
+        avg_hr = np.mean(lead_hrs)
+
+        #BPM classifier
+        if avg_hr > 100:
+            label = "tachycardia"
+            tachycardia_count += 1
+        elif avg_hr < 60:
+            label = "brachycardia"
+            brachycardia_count += 1
+        else:
+            label = "sinus"
+            sinus_count += 1
+
+        print(f"{full_recordid}: Avg HR={avg_hr:.2f} BPM, RMSSD={rmssd:.2f} ms, {label}")
+
+    else:
+        print(f"{full_recordid}: Not enough peaks detected")
+
+#tachycardia vs. brachycardia vs. tachycardia stats
+print(f"tachycardia count: {tachycardia_count}%")
+print(f"brachycardia count: {brachycardia_count}%")
+print(f"sinus count: {sinus_count}%")
+
