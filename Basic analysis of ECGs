@@ -1,4 +1,3 @@
-!pip install wfdb==4.3.1 neurokit2
 import wfdb
 import matplotlib.pyplot as plt
 
@@ -14,17 +13,23 @@ recordid = "45090959"
 rd_record = wfdb.rdrecord(recordid, pn_dir='mimic-iv-ecg/1.0/files/p1000/p10000117/s45090959')
 wfdb.plot_wfdb(record = rd_record, figsize=(24, 18), title =f'Study {recordid} example', ecg_grids='all')
 
-#30 seconds of ECG material
+#10 seconds of ECG material
 rd_record.p_signal.shape
-ecg_signal = rd_record.p_signal[:,0]
+ecg_signal = rd_record.p_signal[:,1]
 
 #processess the raw ECG signal
 signals, info = nk.ecg_process(ecg_signal, sampling_rate=rd_record.fs)
 
-# Extracts clean ECG and R-peaks location
+# Extracts clean ECG and R-peaks location,  lists signals and info keys
 rpeaks = info["ECG_R_Peaks"]
 cleaned_ecg = signals["ECG_Clean"]
-nk.signal_plot(signals, sampling_rate=rd_record.fs)
+print("Signals:")
+for key in signals.keys():
+    print(key)
+
+print("\nInfo keys:")
+for key in info.keys():
+    print(key)
 
 # Visualize R-peaks in ECG signal
 plot = nk.events_plot(rpeaks, cleaned_ecg)
@@ -37,7 +42,7 @@ sinus_count = 0
 #Get list of ECG records from dataset
 records = wfdb.get_record_list("mimic-iv-ecg/1.0/files/p1000")
 
-num_ecgs_to_process = 10;
+num_ecgs_to_process = 100;
 
 #Loop through the first __ ECGs
 for full_recordid in records[:num_ecgs_to_process]:
@@ -63,8 +68,9 @@ for full_recordid in records[:num_ecgs_to_process]:
         #Get signal for current lead
         signal = rd_record.p_signal[:, lead_idx]
 
-        #remove nan values
-        signal = signal[~np.isnan(signal)]
+        #Skip lead if it contains NaNs
+        if np.isnan(signal).any():
+            continue
 
         #Clean ECG signal
         cleaned = nk.ecg_clean(signal, sampling_rate=fs)
